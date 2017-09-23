@@ -4,6 +4,7 @@ import unittest
 
 import mock
 
+from certbot import constants
 from certbot import errors
 
 from certbot.tests import util as test_util
@@ -133,6 +134,20 @@ class NamespaceConfigTest(test_util.ConfigTestCase):
         self.assertEqual(self.config.namespace.foo, 42)
         self.config.namespace.bar = 1337
         self.assertEqual(self.config.bar, 1337)
+
+    def test_hook_directories(self):
+        self.assertEqual(self.config.renewal_hooks_dir,
+                         os.path.join(self.config.config_dir,
+                                      constants.RENEWAL_HOOKS_DIR))
+        self.assertEqual(self.config.renewal_pre_hooks_dir,
+                         os.path.join(self.config.renewal_hooks_dir,
+                                      constants.RENEWAL_PRE_HOOKS_DIR))
+        self.assertEqual(self.config.renewal_deploy_hooks_dir,
+                         os.path.join(self.config.renewal_hooks_dir,
+                                      constants.RENEWAL_DEPLOY_HOOKS_DIR))
+        self.assertEqual(self.config.renewal_post_hooks_dir,
+                         os.path.join(self.config.renewal_hooks_dir,
+                                      constants.RENEWAL_POST_HOOKS_DIR))
 
 
 if __name__ == '__main__':
