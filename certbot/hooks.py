@@ -57,16 +57,39 @@ def validate_hook(shell_cmd, hook_name):
 
 
 def pre_hook(config):
-    "Run pre-hook if it's defined and hasn't been run."
+    """Run pre-hooks if they exist and haven't already been run.
+
+    When Certbot is running with the renew subcommand, this function
+    runs all hooks in the config.renewal_pre_hook_dir (if it has not
+    already done so) followed by any pre-hook in the config. If hooks in
+    config.renewal_pre_hook_dir are run and the pre-hook in the config
+    is a path to one of these scripts, it is not run twice.
+
+    :param configuration.NamespaceConfig config: Certbot settings
+
+    """
+    if config.verb == "renew" and not pre_hook.already:
+        for hook in list_hooks(config.renewal_pre_hook_dir):
+            _run_pre_hook(hook)
+
     cmd = config.pre_hook
     if cmd and cmd not in pre_hook.already:
-        logger.info("Running pre-hook command: %s", cmd)
-        _run_hook(cmd)
-        pre_hook.already.add(cmd)
+        _run_pre_hook(cmd)
     elif cmd:
         logger.info("Pre-hook command already run, skipping: %s", cmd)
 
 pre_hook.already = set()  # type: ignore
+
+
+def _run_pre_hook(pre_hook):
+    """Run the specified pre-hook.
+
+    :param str pre_hook: command to run as a pre-hook
+
+    """
+    logger.info("Running pre-hook command: %s", cmd)
+    _run_hook(cmd)
+    pre_hook.already.add(cmd)
 
 
 def post_hook(config):
