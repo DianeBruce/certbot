@@ -100,7 +100,7 @@ def post_hook(config):
     """Run post hook if defined.
 
     If the verb is renew, we might have more certs to renew, so we wait until
-    run_saved_post_hooks() is called.
+    :func:`run_renew_post_hooks` is called.
     """
 
     cmd = config.post_hook
@@ -110,17 +110,40 @@ def post_hook(config):
             post_hook.eventually.append(cmd)
     # certonly / run
     elif cmd:
-        logger.info("Running post-hook command: %s", cmd)
-        _run_hook(cmd)
+        _run_post_hook(cmd)
 
 post_hook.eventually = []  # type: ignore
 
 
-def run_saved_post_hooks():
-    """Run any post hooks that were saved up in the course of the 'renew' verb"""
-    for cmd in post_hook.eventually:
-        logger.info("Running post-hook command: %s", cmd)
-        _run_hook(cmd)
+def run_renew_post_hooks(config):
+    """Run saved post-hooks and those in the renew-hooks directory.
+
+    This function should be called just before the renew subcommand
+    exits. Any hooks found in config.renewal_post_hooks_dir are run.
+    Afterwards, any hooks that were saved by the :func:`post_hook`
+    are run that are not absolute paths to the hooks in
+    config.renewal_post_hooks_dir.
+
+    :param configuration.NamespaceConfig config: Certbot settings
+
+    """
+    directory_post_hooks = list_hooks(config.renewal_post_hooks_dir)
+    for hook in directory_post_hooks:
+        _run_post_hook(hook)
+
+    for hook in post_hook.eventually:
+        if hook not in directory_post_hooks:
+            _run_post_hook(hook)
+
+
+def _run_post_hook(command):
+    """Run the specified post-hook.
+
+    :param str command: command to run as a post-hook
+
+    """
+    logger.info("Running post-hook command: %s", command)
+    _run_hook(command)
 
 
 def deploy_hook(config, domains, lineage_path):

@@ -707,7 +707,7 @@ def renew(config, unused_plugins):
     try:
         renewal.handle_renewal_request(config)
     finally:
-        hooks.run_saved_post_hooks()
+        hooks.run_renew_post_hooks(config)
 
 
 def make_or_verify_needed_dirs(config):

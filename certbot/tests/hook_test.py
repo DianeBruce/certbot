@@ -86,7 +86,7 @@ class HookTest(unittest.TestCase):
     def _test_renew_post_hooks(self, expected_count):
         with mock.patch('certbot.hooks.logger.info') as mock_info:
             with mock.patch('certbot.hooks._run_hook') as mock_run:
-                hooks.run_saved_post_hooks()
+                hooks.run_renew_post_hooks()
                 self.assertEqual(mock_run.call_count, expected_count)
                 self.assertEqual(mock_info.call_count, expected_count)
 
