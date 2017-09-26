@@ -132,7 +132,10 @@ def run_renew_post_hooks(config):
         _run_post_hook(hook)
 
     for hook in post_hook.eventually:
-        if hook not in directory_post_hooks:
+        if hook in directory_post_hooks:
+            logger.info("Skipping post-hook '%s' as it was already run.",
+                        config.post_hook)
+        else:
             _run_post_hook(hook)
 
 
@@ -181,9 +184,13 @@ def renew_hook(config, domains, lineage_path):
     for hook in renew_hooks:
         _run_deploy_hook(hook, domains, lineage_path, config.dry_run)
 
-    if config.renew_hook and config.renew_hook not in renew_hooks:
-        _run_deploy_hook(config.renew_hook, domains,
-                         lineage_path, config.dry_run)
+    if config.renew_hook:
+        if config.renew_hook in renew_hooks:
+            logger.info("Skipping deploy-hook '%s' as it was already run.",
+                        config.renew_hook)
+        else:
+            _run_deploy_hook(config.renew_hook, domains,
+                             lineage_path, config.dry_run)
 
 
 def _run_deploy_hook(command, domains, lineage_path, dry_run):
