@@ -28,10 +28,52 @@ cleanup_and_exit() {
     : "------------------ ------------------ ------------------"
     : "------------------  end boulder logs  ------------------"
     : "------------------ ------------------ ------------------"
+    if [ -f "$HOOK_DIRS_TEST" ]; then
+        rm -f "$HOOK_DIRS_TEST"
+    fi
     exit $EXIT_STATUS
 }
 
 trap cleanup_and_exit EXIT
+
+export HOOK_DIRS_TEST="$(mktemp)"
+renewal_hooks_root="$config_dir/renewal-hooks"
+renewal_hooks_dirs=$(echo "$renewal_hooks_root/"{pre,deploy,post})
+renewal_dir_pre_hook="$(echo $renewal_hooks_dirs | cut -f 1 -d " ")/hook.sh"
+renewal_dir_deploy_hook="$(echo $renewal_hooks_dirs | cut -f 2 -d " ")/hook.sh"
+renewal_dir_post_hook="$(echo $renewal_hooks_dirs | cut -f 3 -d " ")/hook.sh"
+
+# Creates hooks in Certbot's renewal hook directory that write to a file
+CreateDirHooks() {
+    for hook_dir in $renewal_hooks_dirs; do
+        mkdir -p $hook_dir
+        hook_path="$hook_dir/hook.sh"
+        cat << EOF > "$hook_path"
+#!/bin/bash -xe
+if [ "\$0" = "$renewal_dir_deploy_hook" ]; then
+    if [ -z "\$RENEWED_DOMAINS" -o -z "\$RENEWED_LINEAGE" ]; then
+        echo "Environment variables not properly set!" >&2
+        exit 1
+    fi
+fi
+echo \$(basename \$(dirname "\$0")) >> "\$HOOK_DIRS_TEST"
+EOF
+        chmod +x "$hook_path"
+    done
+}
+CreateDirHooks
+
+# Asserts that the hooks created by CreateDirHooks have been run once and
+# resets the file.
+CheckDirHooks() {
+    if ! diff "$HOOK_DIRS_TEST" <(echo -e "pre\ndeploy\npost"); then
+        echo "Unexpected directory hook output!" >&2
+        cat "$HOOK_DIRS_TEST"
+        exit 1
+    fi
+    rm -f "$HOOK_DIRS_TEST"
+    export HOOK_DIRS_TEST="$(mktemp)"
+}
 
 common_no_force_renew() {
     certbot_test_no_force_renew \
@@ -213,15 +255,27 @@ CheckCertCount "le.wtf" 1
 # This won't renew (because it's not time yet)
 common_no_force_renew renew
 CheckCertCount "le.wtf" 1
+if [ -s "$HOOK_DIRS_TEST" ]; then
+    echo "Directory hooks were executed for non-renewal!" >&2;
+fi
 
+# test that renewal with no hook directories is not an error
+rm -rf "$renewal_hooks_root"
 # renew using HTTP manual auth hooks
 common renew --cert-name le.wtf --authenticator manual
 CheckCertCount "le.wtf" 2
 
+# test renewal with empty hook directories
+mkdir -p $renewal_hooks_dirs
 # renew using DNS manual auth hooks
 common renew --cert-name dns.le.wtf --authenticator manual
 CheckCertCount "dns.le.wtf" 2
 
+# test renewal with no executables in hook directories
+for hook_dir in $renewal_hooks_dirs; do
+    touch "$hook_dir/file"
+    mkdir "$hook_dir/dir"
+done
 # This will renew because the expiry is less than 10 years from now
 sed -i "4arenew_before_expiry = 4 years" "$root/conf/renewal/le.wtf.conf"
 common_no_force_renew renew --rsa-key-size 2048
@@ -239,11 +293,26 @@ if [ "$size1" -lt 3000 ] || [ "$size2" -lt 3000 ] || [ "$size3" -gt 1800 ] ; the
     exit 1
 fi
 
+# test with directory hooks
+rm -rf "$renewal_hooks_root"
+CreateDirHooks
 # --renew-by-default is used, so renewal should occur
 [ -f "$HOOK_TEST" ] && rm -f "$HOOK_TEST"
 common renew
 CheckCertCount "le.wtf" 4
 CheckHooks
+CheckDirHooks
+
+# test with overlapping directory hooks on the command line
+common renew --certname le2.wtf \
+    --pre-hook "$renewal_dir_pre_hook" \
+    --renew-hook "$renewal_dir_deploy_hook" \
+    --post-hook "$renewal_dir_post_hook"
+CheckDirHooks
+
+# test with overlapping directory hooks in the renewal conf files
+common renew --certname le2.wtf
+CheckDirHooks
 
 # ECDSA
 openssl ecparam -genkey -name secp384r1 -out "${root}/privkey-p384.pem"
